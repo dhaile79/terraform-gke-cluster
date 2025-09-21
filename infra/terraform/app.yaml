@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secret-test
+  namespace: apps
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: secret-test }
+  template:
+    metadata:
+      labels: { app: secret-test }
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+    spec:
+      serviceAccountName: gke-app
+      containers:
+      - name: sm-test
+        image: europe-west2-docker.pkg.dev/devops-test-02072022/test-repo/cloud-sdk:slim
+        command: ["sh","-c","gcloud secrets versions access latest --secret=db-password --project=devops-test-02072022 && sleep 3600"]
+
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+

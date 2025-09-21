@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: secret-test
+  namespace: apps
+spec:
+  serviceAccountName: gke-app # bound to GSA via Workload Identity
+  containers:
+  - name: sm-test
+    image: europe-west2-docker.pkg.dev/devops-test-02072022/test-repo/cloud-sdk:alpine
+    command: ["sh", "-c"]
+    args:
+      - gcloud secrets versions access latest \
+          --secret=db-password \
+          --project=devops-test-02072022 && sleep 3600
+
