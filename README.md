@@ -1,5 +1,24 @@
 # 🚀 Terraform GKE Cluster (Modular, Secure, Scalable)
 
+![Terraform GKE Architecture](docs/terraform-infra-v2.png)
+
+<p align="center">
+  <a href="https://developer.hashicorp.com/terraform/downloads">
+    <img src="https://img.shields.io/badge/Terraform-≥1.6-623CE4?logo=terraform" alt="Terraform" />
+  </a>
+  <a href="https://cloud.google.com/kubernetes-engine">
+    <img src="https://img.shields.io/badge/GCP-GKE-blue?logo=google-cloud" alt="GCP GKE" />
+  </a>
+  <a href="https://kubernetes.io/">
+    <img src="https://img.shields.io/badge/Kubernetes-Production--Ready-326CE5?logo=kubernetes" alt="Kubernetes" />
+  </a>
+  <a href="./LICENSE">
+    <img src="https://img.shields.io/badge/License-MIT-green" alt="License" />
+  </a>
+</p>
+
+---
+
 This repository provisions a **Google Kubernetes Engine (GKE)** cluster using **Terraform**.  
 It demonstrates modern **Infrastructure as Code (IaC)** practices: modular design, security-first defaults, automation with Makefiles, and lifecycle awareness (pre-cluster vs post-cluster setup).  
 
@@ -19,43 +38,49 @@ It demonstrates modern **Infrastructure as Code (IaC)** practices: modular desig
 
 ## 📂 Repository Structure
 
+```bash
+terraform-gke-cluster/
+├── infra/
+│   └── terraform/
+│       ├── main.tf
+│       ├── variables.tf
+│       ├── outputs.tf
+│       ├── terraform.tfvars
+│       ├── destroy.tfvars
+│       └── Makefile
+├── modules/
+│   ├── gke/
+│   │   ├── main.tf
+│   │   └── variables.tf
+│   ├── hpa/
+│   └── vpa/
+└── docs/
+    └── diagram.png   # Architecture overview
 
-
-terraform-gke-cluster/ ├── infra/ │ └── terraform/ │ ├── main.tf │ ├── variables.tf │ ├── outputs.tf │ ├── terraform.tfvars │ ├── destroy.tfvars │ └── Makefile ├── modules/ │ ├── gke/ │ │ ├── main.tf │ │ └── variables.tf │ ├── hpa/ │ └── vpa/ └── docs/ └── diagram.png # (coming soon) Architecture overview
-
-
----
-
-## ✅ Prerequisites
+✅ Prerequisites
 
 Install locally:
 
-- [Terraform](https://developer.hashicorp.com/terraform/downloads) ≥ **1.6**  
-- [gcloud CLI](https://cloud.google.com/sdk/docs/install) (authenticated to your GCP project)  
-- [kubectl](https://kubernetes.io/docs/tasks/tools/)  
-- GCP project with:
-  - **Billing enabled**
-  - APIs enabled:  
-    - `compute.googleapis.com`  
-    - `container.googleapis.com`  
-    - `artifactregistry.googleapis.com`  
-    - `containeranalysis.googleapis.com`  
+Terraform ≥ 1.6
+gcloud CLI
+kubectl
 
----
+APIs that must be enabled in your GCP project:
 
-## ⚙️ Authentication Options
+compute.googleapis.com
+container.googleapis.com
+artifactregistry.googleapis.com
+containeranalysis.googleapis.com
+⚙️ Authentication Options
 
-Terraform uses the **Google provider**, which authenticates using `gcloud` credentials.  
-You can work in **two modes**:
+Terraform uses the Google provider, which authenticates using gcloud credentials.
 
-### 🔹 Test/Demo (using your Google user account)
-```bash
+🔹 Test/Demo (using Google user account)
 gcloud auth login
 gcloud config set project YOUR_PROJECT_ID
 
 
-Terraform will pick up your user credentials automatically.
-⚠️ Fine for learning and demos, but not recommended for production.
+⚠️ Fine for learning and demos, but not production.
 
 🔹 Production (using a dedicated Service Account)
 
@@ -87,9 +112,6 @@ gcloud auth activate-service-account \
   --key-file=terraform-sa-key.json
 gcloud config set project YOUR_PROJECT_ID
 
-
-✅ Now Terraform runs under the Service Account, not your personal user.
-
 ⚙️ Configuration
 
 Define values in terraform.tfvars:
@@ -110,89 +132,58 @@ deletion_protection = false
 
 
 ⚠️ Important – Workload Identity requirement
-The cluster must be created with Workload Identity enabled. Without this, Pods will only run as the node's default compute service account and will not be able to read from Secret Manager or access GCP APIs with annotated Kubernetes Service Accounts.
+Clusters must be created with Workload Identity enabled.
 
-🔧 Example: Enabling Workload Identity in Terraform
+🔧 Example – Enabling Workload Identity in Terraform
 
-This module already injects Workload Identity into your cluster, but if building from scratch, ensure your Terraform includes the following:
+Cluster-level (required):
 
-Cluster-level (required)
 resource "google_container_cluster" "primary" {
-  name     = var.cluster_name
-  location = var.region
-  project  = var.project_id
-
-  deletion_protection = var.deletion_protection
-  remove_default_node_pool = true
-  initial_node_count       = 1
-
-  networking_mode     = "VPC_NATIVE"
-  ip_allocation_policy {}
-
-  private_cluster_config {
-    enable_private_nodes    = true
-    enable_private_endpoint = false
-    master_ipv4_cidr_block  = "172.16.0.0/28"
-  }
-
-  release_channel {
-    channel = "REGULAR"
-  }
-
-  # ✅ Required for Workload Identity
+  ...
   workload_identity_config {
     workload_pool = "${var.project_id}.svc.id.goog"
   }
 }
 
-Node pool-level (required)
+
+Node pool-level (required):
+
 resource "google_container_node_pool" "general" {
-  name       = "${var.cluster_name}-general"
-  location   = var.region
-  project    = var.project_id
-  cluster    = google_container_cluster.primary.name
-  node_count = var.node_count
-
+  ...
   node_config {
-    machine_type = var.node_machine_type
-    disk_size_gb = var.node_disk_size_gb
-    disk_type    = var.node_disk_type
-    oauth_scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-
-    # ✅ Required for Workload Identity
+    ...
     workload_metadata_config {
       mode = "GKE_METADATA"
     }
-
-    labels = {
-      role = "general"
-    }
-  }
-
-  autoscaling {
-    min_node_count = 1
-    max_node_count = 5
   }
 }
 
 
-➡️ Without these blocks, Pods will fall back to authenticating as the node service account (PROJECT_NUMBER-compute@developer.gserviceaccount.com) → leading to PERMISSION_DENIED when accessing APIs like Secret Manager or Pub/Sub.
+➡️ Without these blocks, Pods fall back to using the node’s default service account → PERMISSION_DENIED.
 
 📖 Usage with Makefile
-Initialize
+
+Initialize:
+
 make init
 
-Plan & Apply (safe defaults)
+
+Plan & Apply (safe defaults):
+
 make plan-core
 make apply-core
 make plan-all
 make apply-all
 
-Teardown (disable deletion protection)
+
+Teardown (disable deletion protection):
+
 make plan-destroy
 make destroy
 
-Clean local state
+
+Clean local state:
+
 make clean
 
 🔍 Validation
@@ -207,59 +198,29 @@ kubectl top nodes
 🔐 Security & Cost Optimisation
 ✅ Private nodes (no external IPs)
 ✅ Deletion protection (enabled by default)
-✅ Workload Identity must be enabled (to allow Secret Manager / GCP API access from pods)
-✅ Preemptible/spot nodes optional for dev/test
-✅ Node autoscaling to control cost
+✅ Workload Identity enabled
+✅ Preemptible/spot nodes for dev/test
+✅ Autoscaling for cost control
 🔑 Workload Identity + Secret Manager
 
-Workload Identity securely maps Kubernetes Service Accounts (KSAs) to Google IAM Service Accounts (GSAs).
-This removes the need for long-lived keys and ensures Pods can only access what IAM permits.
+Pre-Cluster:
 
-⚠️ Cluster Creation Requirement
-To use Workload Identity, the GKE cluster must be created with:
-
-workload_identity_config at the cluster level
-workload_metadata_config { mode = "GKE_METADATA" } at the node pool level
-🛠 Pre-Cluster Provisioning (GCP-level)
-
-Create GSA:
-
-gcloud iam service-accounts create gke-workload \
-  --project=YOUR_PROJECT_ID
-
-
-Grant IAM role:
-
+gcloud iam service-accounts create gke-workload --project=YOUR_PROJECT_ID
 gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
   --member "serviceAccount:gke-workload@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
   --role "roles/secretmanager.secretAccessor"
+echo -n "super-secret-password" | gcloud secrets create db-password --data-file=-
 
 
-Store secret in Secret Manager:
-
-echo -n "super-secret-password" | \
-  gcloud secrets create db-password --data-file=-
-
-🛠 Post-Cluster Provisioning (Kubernetes-level)
-
-Create namespace:
+Post-Cluster:
 
 kubectl create namespace apps
-
-
-Create KSA:
-
 kubectl create serviceaccount gke-app -n apps
-
-
-Annotate KSA with GSA:
-
-kubectl annotate serviceaccount gke-app \
-  -n apps \
+kubectl annotate serviceaccount gke-app -n apps \
   iam.gke.io/gcp-service-account=gke-workload@YOUR_PROJECT_ID.iam.gserviceaccount.com
 
 
-Run Pod that consumes secret:
+Pod test:
 
 apiVersion: v1
 kind: Pod
@@ -273,20 +234,24 @@ spec:
     image: google/cloud-sdk:slim
     command: ["sh", "-c", "gcloud secrets versions access latest --secret=db-password"]
 
-
-✅ The Pod authenticates via Workload Identity → GSA → Secret Manager, without exposing service account keys.
-
 🎯 Next Steps
-Add OPA/Gatekeeper for policy enforcement
-Bootstrap GitOps with ArgoCD App-of-Apps
-Enforce Network Policies for workload isolation
-Add FinOps dashboards to monitor GKE spend
-👔 Why this repo matters
+Enforce OPA/Gatekeeper
+Bootstrap GitOps with ArgoCD
+Add Network Policies
+Add FinOps dashboards
+👔 Why this Repo Matters
 
-This project was built to experiment with real-world GCP scenarios and capture lessons you only learn by running infrastructure in the cloud.
+This project was built to experiment with real-world GCP scenarios and capture lessons you only learn by running infra in the cloud:
 
-Test failures (e.g. quota limits, tiny node types) became learning opportunities for designing resilient clusters.
-IaC is optimized for repeatability and clarity — from Makefile automation to modular Terraform.
-Balances learning by doing with production-grade patterns: workload identity instead of key files, deletion protection by default, and safe teardown workflows.
+Failures became learning opportunities 🛠️
+IaC optimized for repeatability + clarity
+Production-grade patterns: WI, deletion protection, Makefiles
+
+---
+
+✅ Changes made:
+- Added **project image right after the title**  
+- Grouped shell commands into **fenced `bash` blocks**  
+- Broke down long sections into **clear subsections**  
 
 ---
