@@ -57,65 +57,76 @@ terraform-gke-cluster/
 └── docs/
     └── diagram.png   # Architecture overview
 
-✅ Prerequisites
+---
+
+## ✅ Prerequisites
 
 Install locally:
 
-Terraform ≥ 1.6
-gcloud CLI
-kubectl
+- [Terraform](https://developer.hashicorp.com/terraform/downloads) ≥ **1.6**  
+- [gcloud CLI](https://cloud.google.com/sdk/docs/install)  
+- [kubectl](https://kubernetes.io/docs/tasks/tools/)  
 
-APIs that must be enabled in your GCP project:
+APIs that must be enabled in your GCP project:  
+- `compute.googleapis.com`  
+- `container.googleapis.com`  
+- `artifactregistry.googleapis.com`  
+- `containeranalysis.googleapis.com`  
 
-compute.googleapis.com
-container.googleapis.com
-artifactregistry.googleapis.com
-containeranalysis.googleapis.com
-⚙️ Authentication Options
+---
 
-Terraform uses the Google provider, which authenticates using gcloud credentials.
+## ⚙️ Authentication Options
 
-🔹 Test/Demo (using Google user account)
+Terraform uses the **Google provider**, which authenticates using `gcloud` credentials.  
+
+### 🔹 Test/Demo (using Google user account)
+```bash
 gcloud auth login
 gcloud config set project YOUR_PROJECT_ID
+```
 
+⚠️ Fine for **learning and demos**, but not production.
 
-⚠️ Fine for learning and demos, but not production.
+---
 
-🔹 Production (using a dedicated Service Account)
+### 🔹 Production (using a dedicated Service Account)
 
-Create a Service Account:
-
+**Create a Service Account:**
+```bash
 gcloud iam service-accounts create terraform-sa \
   --display-name "Terraform Service Account"
+```
 
-
-Grant IAM roles (least privilege):
-
+**Grant IAM roles (least privilege):**
+```bash
 gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
   --member "serviceAccount:terraform-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
   --role roles/container.admin \
   --role roles/compute.networkAdmin \
   --role roles/iam.serviceAccountUser
+```
 
-
-Download a key (for CI/CD pipelines):
-
+**Download a key (for CI/CD pipelines):**
+```bash
 gcloud iam service-accounts keys create terraform-sa-key.json \
   --iam-account terraform-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com
+```
 
-
-Authenticate with Service Account:
-
+**Authenticate with Service Account:**
+```bash
 gcloud auth activate-service-account \
   terraform-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com \
   --key-file=terraform-sa-key.json
 gcloud config set project YOUR_PROJECT_ID
+```
 
-⚙️ Configuration
+---
 
-Define values in terraform.tfvars:
+## ⚙️ Configuration
 
+Define values in `terraform.tfvars`:
+
+```hcl
 project_id            = "YOUR_PROJECT_ID"
 region                = "europe-west2"
 cluster_name          = "demo-gke-cluster"
@@ -124,30 +135,33 @@ node_machine_type     = "e2-medium"
 node_disk_size_gb     = 30
 node_disk_type        = "pd-standard"
 deletion_protection   = true   # always true in prod
+```
 
+For teardown, override in `destroy.tfvars`:
 
-For teardown, override in destroy.tfvars:
-
+```hcl
 deletion_protection = false
+```
 
+⚠️ **Important – Workload Identity requirement**  
+Clusters must be created with **Workload Identity enabled**.
 
-⚠️ Important – Workload Identity requirement
-Clusters must be created with Workload Identity enabled.
+---
 
-🔧 Example – Enabling Workload Identity in Terraform
+## 🔧 Example – Enabling Workload Identity in Terraform
 
-Cluster-level (required):
-
+**Cluster-level (required):**
+```hcl
 resource "google_container_cluster" "primary" {
   ...
   workload_identity_config {
     workload_pool = "${var.project_id}.svc.id.goog"
   }
 }
+```
 
-
-Node pool-level (required):
-
+**Node pool-level (required):**
+```hcl
 resource "google_container_node_pool" "general" {
   ...
   node_config {
@@ -157,71 +171,83 @@ resource "google_container_node_pool" "general" {
     }
   }
 }
+```
 
+➡️ Without these blocks, Pods fall back to using the node’s default service account → `PERMISSION_DENIED`.
 
-➡️ Without these blocks, Pods fall back to using the node’s default service account → PERMISSION_DENIED.
+---
 
-📖 Usage with Makefile
+## 📖 Usage with Makefile
 
-Initialize:
-
+**Initialize:**
+```bash
 make init
+```
 
-
-Plan & Apply (safe defaults):
-
+**Plan & Apply (safe defaults):**
+```bash
 make plan-core
 make apply-core
 make plan-all
 make apply-all
+```
 
-
-Teardown (disable deletion protection):
-
+**Teardown (disable deletion protection):**
+```bash
 make plan-destroy
 make destroy
+```
 
-
-Clean local state:
-
+**Clean local state:**
+```bash
 make clean
+```
 
-🔍 Validation
+---
+
+## 🔍 Validation
 
 After cluster creation:
-
+```bash
 make get-credentials PROJECT=YOUR_PROJECT_ID REGION=europe-west2 CLUSTER=demo-gke-cluster
 
 kubectl get nodes
 kubectl top nodes
+```
 
-🔐 Security & Cost Optimisation
-✅ Private nodes (no external IPs)
-✅ Deletion protection (enabled by default)
-✅ Workload Identity enabled
-✅ Preemptible/spot nodes for dev/test
-✅ Autoscaling for cost control
-🔑 Workload Identity + Secret Manager
+---
 
-Pre-Cluster:
+## 🔐 Security & Cost Optimisation
 
+- ✅ Private nodes (no external IPs)  
+- ✅ Deletion protection (enabled by default)  
+- ✅ Workload Identity enabled  
+- ✅ Preemptible/spot nodes for dev/test  
+- ✅ Autoscaling for cost control  
+
+---
+
+## 🔑 Workload Identity + Secret Manager
+
+**Pre-Cluster:**
+```bash
 gcloud iam service-accounts create gke-workload --project=YOUR_PROJECT_ID
 gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
   --member "serviceAccount:gke-workload@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
   --role "roles/secretmanager.secretAccessor"
 echo -n "super-secret-password" | gcloud secrets create db-password --data-file=-
+```
 
-
-Post-Cluster:
-
+**Post-Cluster:**
+```bash
 kubectl create namespace apps
 kubectl create serviceaccount gke-app -n apps
 kubectl annotate serviceaccount gke-app -n apps \
   iam.gke.io/gcp-service-account=gke-workload@YOUR_PROJECT_ID.iam.gserviceaccount.com
+```
 
-
-Pod test:
-
+**Pod test:**
+```yaml
 apiVersion: v1
 kind: Pod
 metadata:
@@ -233,25 +259,27 @@ spec:
   - name: sm-test
     image: google/cloud-sdk:slim
     command: ["sh", "-c", "gcloud secrets versions access latest --secret=db-password"]
-
-🎯 Next Steps
-Enforce OPA/Gatekeeper
-Bootstrap GitOps with ArgoCD
-Add Network Policies
-Add FinOps dashboards
-👔 Why this Repo Matters
-
-This project was built to experiment with real-world GCP scenarios and capture lessons you only learn by running infra in the cloud:
-
-Failures became learning opportunities 🛠️
-IaC optimized for repeatability + clarity
-Production-grade patterns: WI, deletion protection, Makefiles
+```
 
 ---
 
-✅ Changes made:
-- Added **project image right after the title**  
-- Grouped shell commands into **fenced `bash` blocks**  
-- Broke down long sections into **clear subsections**  
+## 🎯 Next Steps
+
+- Enforce OPA/Gatekeeper  
+- Bootstrap GitOps with ArgoCD  
+- Add Network Policies  
+- Add FinOps dashboards  
 
 ---
+
+## 👔 Why this Repo Matters
+
+This project was built to **experiment with real-world GCP scenarios** and capture lessons you only learn by running infra in the cloud:  
+- Failures became learning opportunities 🛠️  
+- IaC optimized for **repeatability + clarity**  
+- Production-grade patterns: WI, deletion protection, Makefiles  
+```
+
+---
+
+
