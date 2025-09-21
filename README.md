@@ -278,8 +278,5 @@ This project was built to **experiment with real-world GCP scenarios** and captu
 - Failures became learning opportunities 🛠️  
 - IaC optimized for **repeatability + clarity**  
 - Production-grade patterns: WI, deletion protection, Makefiles  
-```
-
----
 
 
